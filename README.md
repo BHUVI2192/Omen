@@ -1,0 +1,86 @@
+# OMEN
+
+**OMEN** is an institutional career intelligence and employability platform. It connects student profile signals, current market demand, learning progress, verified projects, placement opportunities, applications, outcomes, and institutional interventions.
+
+> **Your career shouldn't be a guess.** OMEN is designed to show where a student stands in the market and what to do next—not to make unsupported hiring-probability claims.
+
+## What is implemented
+
+The repository contains a Next.js + TypeScript frontend, a FastAPI + Pydantic backend, version-controlled Supabase/PostgreSQL migrations with RLS policies, a seeded market fallback dataset, and a working end-to-end demo vertical slice:
+
+- Student landing page and dashboard with market employability score, component breakdown, positive/negative factors, skill gaps, career explorer, what-if projection, opportunities, applications, notifications, and TPO analytics.
+- FastAPI endpoints for profile, intelligence, careers, market, jobs, applications, notifications, TPO overview, status transitions, and CSV result preview.
+- Market-driven scoring based on normalized demand, demonstrated proficiency, practical experience, assessment signals, and communication. This is explicitly labeled as a development fallback and readiness signal.
+- Deterministic hard eligibility engine, separate role matching, application state history, and human-controlled TPO status updates.
+- Supabase migration with core profiles, skills, roles, jobs, applications, learning, projects, notifications, bootcamps, polls, market snapshots, indexes, and RLS policies.
+
+The API currently runs in a safe **demo mode** when Supabase credentials are absent so the application is locally demonstrable. Replace the repository-backed demo store with Supabase repository calls for production deployment; the schema and policy foundation are ready for that connection.
+
+## Run locally
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt
+cp ../.env.example .env        # fill server-side values when using Supabase
+uvicorn app.main:app --reload --port 8000
+```
+
+API docs: <http://localhost:8000/docs>
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+cp ../.env.example .env.local
+npm run dev
+```
+
+Open <http://localhost:3000>. The frontend calls `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8000/api/v1`).
+
+## Supabase setup
+
+1. Create a Supabase project and configure Google under **Authentication → Providers → Google**. The Google client secret remains in Supabase; it is never placed in this repo.
+2. Run `supabase/migrations/202609100001_omen_core.sql` in the Supabase SQL editor or with the Supabase CLI.
+3. Run `supabase/seed/seed.sql` for development catalog data. Seed data is clearly development-only.
+4. Add server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and optional `DATABASE_URL` to the backend environment. Never expose the service role key or database URL to the browser.
+5. Create private storage buckets for `resumes`, `certificates`, `project-submissions`, `course-resources`, and `company-documents`, then add storage policies following the same `auth.uid()` ownership pattern.
+
+## Architecture
+
+```text
+Next.js UI → typed API boundary → FastAPI routes/services → Supabase/PostgreSQL + Storage
+                                      ↓
+                  market normalization → skill graph → matching / gaps → learning / verification
+                                      ↓
+                            jobs → eligibility + match → application → TPO review → outcome intelligence
+```
+
+The `backend/app/intelligence/engine.py` module intentionally keeps market scoring, role matching, and deterministic eligibility separate. A future provider can replace the local snapshot without rewriting the scoring contract.
+
+## Testing
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest -q
+```
+
+For a smoke test after starting the API:
+
+```bash
+curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/api/v1/students/me/intelligence
+```
+
+## Security
+
+`.env`, secrets, keys, passwords, and credentials are ignored. Supabase RLS policies protect student-owned records and give TPOs controlled institutional access. Backend CORS is configured through `CORS_ORIGINS`. File uploads should be sent through a server-side signed upload flow in production with MIME and size validation.
+
+## Product boundaries
+
+OMEN is not a job board, ATS, external recruitment portal, scraping platform, generic chatbot, or unsupported hiring predictor. External application URLs are recorded and opened after OMEN records the application.
