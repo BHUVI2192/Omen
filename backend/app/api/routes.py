@@ -16,6 +16,7 @@ APPLICATIONS=[]
 NOTIFICATIONS=[{'id':'n1','title':'Welcome to OMEN','body':'Your market intelligence workspace is ready. Start with your skill gaps.','type':'system','read':False}]
 DEMO_COURSES=[{'id':'course-sql','title':'SQL for Decision Makers','description':'Build query fluency and analytical confidence for data roles.','skill':'SQL','difficulty':'Beginner','estimated_hours':24,'phases':[{'id':'phase-sql-1','title':'SQL Fundamentals','resources':[{'id':'res-1','title':'SQL SELECT documentation','resource_type':'documentation','url':'https://www.postgresql.org/docs/current/sql-select.html','duration_minutes':25}]}],'assessment':{'id':'assessment-sql-1','title':'SQL foundations check','passing_score':70,'questions':[{'id':'q1','question':'Which clause filters rows before grouping?','question_type':'mcq','options':['WHERE','HAVING','ORDER BY','LIMIT'],'correct_answer':'WHERE','explanation':'WHERE filters rows before grouping.','skill_id':'SQL'},{'id':'q2','question':'Remove extra spaces and normalize casing: the keyword for grouping rows is ____','question_type':'fill_blank','options':[],'correct_answer':'group by','explanation':'GROUP BY groups rows for aggregation.','skill_id':'SQL'}]},'project':{'id':'project-sql-capstone','title':'SQL Analytics Capstone','objective':'Analyze a business dataset and communicate decisions.','requirements':['Use joins','Use aggregation','Include a README'],'required_skills':[{'skill':'SQL','level':75}],'status':'Not Started','verification_status':'Not Started'}}]
 DEMO_ATTEMPTS=[]; DEMO_PROJECTS=[]
+ONBOARDING_CATALOGS={'departments':['Computer Science & Engineering','Information Technology','Artificial Intelligence & Machine Learning','Artificial Intelligence & Data Science','Electronics & Communication Engineering','Electrical & Electronics Engineering','Electrical Engineering','Mechanical Engineering','Civil Engineering','Chemical Engineering','Biotechnology','Other'],'degrees':['B.Tech','B.E.','M.Tech','M.E.','BCA','MCA','B.Sc.','M.Sc.','Other'],'skills':['Python','Java','C','C++','JavaScript','TypeScript','Go','Rust','React','Next.js','Node.js','Express','HTML','CSS','Tailwind','SQL','Pandas','NumPy','TensorFlow','PyTorch','Scikit-learn','Machine Learning','Deep Learning','LLMs','AWS','Azure','GCP','Docker','Kubernetes','Git','GitHub','CI/CD'],'roles':['Software Engineer','Frontend Developer','Backend Developer','Full Stack Developer','Data Analyst','Data Scientist','ML Engineer','AI Engineer','Cloud Engineer','DevOps Engineer','Cybersecurity Engineer','Product Manager','UI/UX Designer'],'industries':['Technology','FinTech','Healthcare','Automotive','Consulting','E-commerce','Gaming','EdTech','Research','Government'],'proficiency_levels':['Beginner','Developing','Proficient','Advanced'],'readiness_levels':['Just starting','Developing','Comfortable','Strong'],'practice_frequency':['Rarely','1–2 days/week','3–4 days/week','Almost every day']}
 
 def _request_user(authorization: str | None):
     return current_user(authorization) if is_configured() else {'id':'demo-student','email':'demo@omen.local','role':'student'}
@@ -37,6 +38,7 @@ class ProfileUpdate(BaseModel):
     name: str = Field(min_length=2)
     student_id: str | None = None
     department: str
+    degree: str | None = None
     branch: str
     semester: int = Field(ge=1, le=12)
     graduation_year: int | None = None
@@ -51,6 +53,15 @@ class ProfileUpdate(BaseModel):
     open_source: int = Field(default=0, ge=0, le=20)
     freelancing: int = Field(default=0, ge=0, le=20)
     readiness_signals: dict[str,float] = {}
+    career_intents: list[str] = []
+    preferred_industries: list[str] = []
+    work_environment: str | None = None
+    target_ctc: str | None = None
+    practice_frequency: str | None = None
+    experience_categories: list[str] = []
+    projects_data: list[dict] = []
+    onboarding_step: int = Field(default=8, ge=1, le=8)
+    profile_completeness: float = Field(default=100, ge=0, le=100)
 
 class ApplicationCreate(BaseModel):
     job_id: str
@@ -75,6 +86,27 @@ def auth_me(authorization: str | None = Header(default=None)):
 def get_student_profile(authorization: str | None = Header(default=None)):
     _, profile=_student_data(authorization)
     return {'profile':profile,'mode':'supabase' if is_configured() else 'demo'}
+
+@router.get('/catalogs/onboarding')
+def onboarding_catalogs():
+    return ONBOARDING_CATALOGS
+
+@router.get('/students/me/onboarding')
+def get_onboarding(authorization: str | None = Header(default=None)):
+    user=_request_user(authorization)
+    if is_configured(): return OmenRepository(user['id']).onboarding_draft()
+    return {'onboarding_draft':{},'onboarding_step':1,'profile_completeness':0,'onboarding_complete':False,'mode':'demo'}
+
+class OnboardingDraft(BaseModel):
+    draft: dict
+    step: int = Field(ge=1, le=8)
+    completeness: float = Field(ge=0, le=100)
+
+@router.put('/students/me/onboarding')
+def save_onboarding(payload: OnboardingDraft, authorization: str | None = Header(default=None)):
+    user=_request_user(authorization)
+    if is_configured(): return {'onboarding':OmenRepository(user['id']).save_onboarding_draft(payload.draft,payload.step,payload.completeness)}
+    return {'onboarding':{'onboarding_draft':payload.draft,'onboarding_step':payload.step,'profile_completeness':payload.completeness,'mode':'demo'}}
 
 @router.get('/courses')
 def courses():
@@ -251,11 +283,14 @@ def update_profile(payload: ProfileUpdate, authorization: str | None = Header(de
     if is_configured():
         user=current_user(authorization)
         saved=OmenRepository(user['id']).save_student_profile({
-            'full_name':payload.name,'student_id':payload.student_id,'department':payload.department,'branch':payload.branch,
+            'full_name':payload.name,'student_id':payload.student_id,'department':payload.department,'degree':payload.degree,'branch':payload.branch,
             'semester':payload.semester,'graduation_year':payload.graduation_year,'tenth_percentage':payload.tenth_percentage,
             'twelfth_percentage':payload.twelfth_percentage,'cgpa':payload.cgpa,'backlogs':payload.backlogs,
             'projects_count':payload.projects,'internships_count':payload.internships,'hackathons_count':payload.hackathons,
             'open_source_count':payload.open_source,'freelance_count':payload.freelancing,'readiness_signals':payload.readiness_signals,
+            'career_intents':payload.career_intents,'career_intent':payload.career_intents[0] if payload.career_intents else None,
+            'preferred_industries':payload.preferred_industries,'work_environment':payload.work_environment,'target_ctc':payload.target_ctc,
+            'practice_frequency':payload.practice_frequency,'onboarding_step':payload.onboarding_step,'profile_completeness':payload.profile_completeness,
         }, payload.skills)
         return {'ok':True,'profile':saved,'mode':'supabase'}
     return {'ok':True,'profile':DEMO_STUDENT,'mode':'demo'}

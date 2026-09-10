@@ -20,10 +20,19 @@ class OmenRepository:
         s=client().table('student_profiles').select('*').eq('user_id',self.user_id).limit(1).execute().data
         skills=client().table('student_skills').select('proficiency,skills(name)').eq('student_id',s[0]['id']).execute().data if s else []
         row={**p[0],**(s[0] if s else {})}; row['skills']={x['skills']['name']:x['proficiency'] for x in skills if x.get('skills')}; return row
+    def onboarding_draft(self) -> dict[str, Any] | None:
+        if not is_configured(): return None
+        rows=client().table('student_profiles').select('onboarding_draft,onboarding_step,profile_completeness,onboarding_complete').eq('user_id',self.user_id).limit(1).execute().data
+        return rows[0] if rows else {'onboarding_draft':{},'onboarding_step':1,'profile_completeness':0,'onboarding_complete':False}
+    def save_onboarding_draft(self, draft: dict[str, Any], step: int, completeness: float) -> dict[str, Any]:
+        if not is_configured(): return {'onboarding_draft':draft,'onboarding_step':step,'profile_completeness':completeness}
+        client().table('profiles').upsert({'id':self.user_id}).execute()
+        row=client().table('student_profiles').upsert({'user_id':self.user_id,'onboarding_draft':draft,'onboarding_step':step,'profile_completeness':completeness},on_conflict='user_id').execute().data
+        return row[0] if row else {'onboarding_draft':draft,'onboarding_step':step,'profile_completeness':completeness}
     def save_student_profile(self, profile: dict[str, Any], skills: dict[str,float]) -> dict[str, Any]:
         if not is_configured(): return profile
         db=client(); db.table('profiles').upsert({'id':self.user_id,'full_name':profile.get('full_name'),'department':profile.get('department')}).execute()
-        student={k:profile[k] for k in ('student_id','branch','semester','graduation_year','cgpa','backlogs','tenth_percentage','twelfth_percentage','career_intent','projects_count','internships_count','hackathons_count','open_source_count','freelance_count','readiness_signals') if k in profile}; student.update({'user_id':self.user_id,'onboarding_complete':True})
+        student={k:profile[k] for k in ('student_id','branch','semester','degree','graduation_year','cgpa','backlogs','tenth_percentage','twelfth_percentage','career_intent','career_intents','preferred_industries','work_environment','target_ctc','projects_count','internships_count','hackathons_count','open_source_count','freelance_count','readiness_signals','practice_frequency','onboarding_step','profile_completeness') if k in profile}; student.update({'user_id':self.user_id,'onboarding_complete':True})
         row=db.table('student_profiles').upsert(student,on_conflict='user_id').execute().data[0]
         for name,proficiency in skills.items():
             found=db.table('skills').select('id').eq('name',name).limit(1).execute().data

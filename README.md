@@ -132,3 +132,12 @@ The learning flow is: course catalog → course phases and linked resources → 
 Project verification is TPO/admin controlled. Students can submit GitHub URLs, view their own projects and feedback, and resubmit after `Rework Required`. Students cannot set `Verified`, change TPO feedback, or alter assessment results. Verified project evidence is stored in `skill_verifications` and also updates the corresponding `student_skills` record with `source = verified_project` using the transparent rule `max(existing proficiency, verified project level)`; verification never arbitrarily inflates a skill. Subsequent intelligence and skill-gap reads consume the updated student skill evidence.
 
 Phase 2 schema migrations are `202609110006_phase2_learning_verification.sql`, `202609110007_phase2_security.sql`, and `202609110008_phase2_rework_security.sql`. RLS remains enabled on courses, resources, assessments, attempts, projects, and verification records. The intended course completion rule is: all required phases completed, a passing assessment, and a final project verified; course progress alone is not treated as verified skill.
+
+
+## Phase 1.5 onboarding and Career DNA UX
+
+The onboarding flow now uses eight progressive steps: Welcome, Academics, Technical Profile, Projects & Experience, Resume, Career Intent, Readiness, and Career DNA Created. The UI uses controlled department, degree, skill, role, industry, proficiency, readiness, and practice-frequency catalogs from `GET /api/v1/catalogs/onboarding`; it does not duplicate department labels across components.
+
+Onboarding drafts autosave through `GET/PUT /api/v1/students/me/onboarding` and preserve the current step, draft data, and meaningful profile completeness. Final submission continues to use `PUT /api/v1/students/me/profile`, preserving the existing repository and Supabase ownership architecture. Structured profile fields include career intents, preferred industries, work environment, target CTC, readiness signals, practice frequency, and project metadata.
+
+Resume upload remains private PDF storage with a 5 MB limit. No resume parser exists in the current backend, so the redesigned UI intentionally does not display fabricated extracted entities. It shows secure upload state and clearly indicates that extracted entities will appear only when a real parser returns them. Skill cards retain source-aware labels such as `Self-reported`; later assessed, resume-extracted, project-evidence, and TPO-verified sources remain distinct.

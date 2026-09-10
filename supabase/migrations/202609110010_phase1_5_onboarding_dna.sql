@@ -1,0 +1,13 @@
+alter table public.student_profiles add column if not exists degree text;
+alter table public.student_profiles add column if not exists career_intents jsonb not null default '[]';
+alter table public.student_profiles add column if not exists preferred_industries jsonb not null default '[]';
+alter table public.student_profiles add column if not exists work_environment text;
+alter table public.student_profiles add column if not exists target_ctc text;
+alter table public.student_profiles add column if not exists practice_frequency text;
+alter table public.student_profiles add column if not exists onboarding_step int not null default 1;
+alter table public.student_profiles add column if not exists profile_completeness numeric(5,2) not null default 0;
+alter table public.student_profiles add column if not exists onboarding_draft jsonb not null default '{}';
+alter table public.projects add column if not exists technologies jsonb not null default '[]';
+alter table public.projects add column if not exists collaboration_type text;
+alter table public.projects add column if not exists team_size int;
+alter table public.projects add column if not exists student_role text;
