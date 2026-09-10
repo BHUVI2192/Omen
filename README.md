@@ -141,3 +141,14 @@ The onboarding flow now uses eight progressive steps: Welcome, Academics, Techni
 Onboarding drafts autosave through `GET/PUT /api/v1/students/me/onboarding` and preserve the current step, draft data, and meaningful profile completeness. Final submission continues to use `PUT /api/v1/students/me/profile`, preserving the existing repository and Supabase ownership architecture. Structured profile fields include career intents, preferred industries, work environment, target CTC, readiness signals, practice frequency, and project metadata.
 
 Resume upload remains private PDF storage with a 5 MB limit. No resume parser exists in the current backend, so the redesigned UI intentionally does not display fabricated extracted entities. It shows secure upload state and clearly indicates that extracted entities will appear only when a real parser returns them. Skill cards retain source-aware labels such as `Self-reported`; later assessed, resume-extracted, project-evidence, and TPO-verified sources remain distinct.
+
+
+## Phase 1.5 stabilization
+
+The stabilization pass fixed the onboarding runtime path without changing the completed authentication, RBAC, RLS, dashboard, or Phase 2 architecture. Student profile, onboarding draft, and resume APIs now require an Authorization header; in local tests, `Bearer demo-token` is accepted only as an explicit development token. The real frontend onboarding no longer invents or silently falls back to that token. Missing sessions show a sign-in state instead of silently using demo data.
+
+FastAPI CORS explicitly allows `http://localhost:3000`, authenticated requests, `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS`. The reported browser CORS message was secondary to failed authentication/server requests; direct verification now returns `401` for unauthenticated profile access and `2xx` for explicit authenticated development requests, with correct preflight headers.
+
+Resume uploads now require an authenticated student, non-empty valid PDF bytes beginning with the PDF signature, and a maximum size of 5 MB. Production uploads use the private Supabase Storage bucket `resumes` at a unique path `{authenticated_user_id}/{uuid}.pdf`, then persist storage path, original filename, content type, file size, and timestamp metadata in `public.resumes`. The service-role key remains backend-only. Storage policies scope object access to the authenticated user folder, and no public URL is returned.
+
+Hydration investigation found no OMEN onboarding-level `AudioContext`, random ID, browser-only render branch, or remaining onboarding date expression after stabilization. Production and development browser loads showed no hydration or AudioContext console errors. The only remaining date formatting is in the isolated `/demo` application-history view after data is loaded; it does not participate in onboarding render hydration.

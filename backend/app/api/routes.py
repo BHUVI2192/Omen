@@ -1,4 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Header
+import logging
+from pathlib import Path
+from uuid import uuid4
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from app.intelligence.engine import calculate_score, role_match, eligibility, ROLES, MARKET_SKILLS
@@ -9,6 +12,7 @@ from app.core.authz import require_tpo
 from app.intelligence.assessment import grade_questions
 
 router = APIRouter()
+log = logging.getLogger('omen.api')
 
 DEMO_STUDENT = {'id':'demo-student','name':'Aarav Mehta','student_id':'OMEN-1024','department':'Computer Science','branch':'CSE','semester':7,'cgpa':8.1,'backlogs':0,'skills':{'Python':82,'Git':76,'SQL':43,'React':61,'Statistics':58,'Cloud':34,'Communication':47,'DSA':64,'Excel':55},'experience':{'projects':2,'internships':1},'assessments':{'problem_solving':72,'communication':47}}
 JOBS = [{'id':'job-1','company':'Northstar Labs','role':'Data Analyst','ctc':'₹12–16 LPA','location':'Bengaluru · Hybrid','minimum_cgpa':7.0,'allowed_branches':['CSE','IT','ECE'],'max_backlogs':0,'deadline':'2026-10-18','skills':['SQL','Python','Power BI','Statistics'],'description':'Own dashboards and analysis that help product teams make faster decisions.','external_url':'https://example.com/apply/northstar'}]
@@ -20,6 +24,11 @@ ONBOARDING_CATALOGS={'departments':['Computer Science & Engineering','Informatio
 
 def _request_user(authorization: str | None):
     return current_user(authorization) if is_configured() else {'id':'demo-student','email':'demo@omen.local','role':'student'}
+
+def _real_student(authorization: str | None):
+    if not authorization:
+        raise HTTPException(401,'Authentication required for student data')
+    return current_user(authorization)
 
 def _request_tpo(authorization: str | None):
     user=_request_user(authorization)
@@ -84,7 +93,9 @@ def auth_me(authorization: str | None = Header(default=None)):
 
 @router.get('/students/me/profile')
 def get_student_profile(authorization: str | None = Header(default=None)):
-    _, profile=_student_data(authorization)
+    user=_real_student(authorization)
+    profile=OmenRepository(user['id']).student_profile() if is_configured() else DEMO_STUDENT
+    if is_configured() and not profile: raise HTTPException(404,'Student onboarding is incomplete')
     return {'profile':profile,'mode':'supabase' if is_configured() else 'demo'}
 
 @router.get('/catalogs/onboarding')
@@ -93,7 +104,7 @@ def onboarding_catalogs():
 
 @router.get('/students/me/onboarding')
 def get_onboarding(authorization: str | None = Header(default=None)):
-    user=_request_user(authorization)
+    user=_real_student(authorization)
     if is_configured(): return OmenRepository(user['id']).onboarding_draft()
     return {'onboarding_draft':{},'onboarding_step':1,'profile_completeness':0,'onboarding_complete':False,'mode':'demo'}
 
@@ -104,7 +115,7 @@ class OnboardingDraft(BaseModel):
 
 @router.put('/students/me/onboarding')
 def save_onboarding(payload: OnboardingDraft, authorization: str | None = Header(default=None)):
-    user=_request_user(authorization)
+    user=_real_student(authorization)
     if is_configured(): return {'onboarding':OmenRepository(user['id']).save_onboarding_draft(payload.draft,payload.step,payload.completeness)}
     return {'onboarding':{'onboarding_draft':payload.draft,'onboarding_step':payload.step,'profile_completeness':payload.completeness,'mode':'demo'}}
 
@@ -246,14 +257,26 @@ def rework_project(project_id: str, payload: ProjectReview, authorization: str |
 
 @router.post('/resumes')
 async def upload_resume(file: UploadFile = File(...), authorization: str | None = Header(default=None)):
+    user=_real_student(authorization)
     if file.content_type != 'application/pdf': raise HTTPException(415,'Only PDF resumes are accepted')
     content=await file.read()
+    if not content: raise HTTPException(422,'Resume file is empty')
     if len(content)>5*1024*1024: raise HTTPException(413,'Resume must be smaller than 5 MB')
+    if not content.startswith(b'%PDF-'): raise HTTPException(415,'The uploaded file is not a valid PDF')
+    original=Path(file.filename or 'resume.pdf').name
+    if not original.lower().endswith('.pdf'): original=f'{original}.pdf'
     if is_configured():
-        user=current_user(authorization); path=f"{user['id']}/{file.filename}"
-        client().storage.from_('resumes').upload(path,content,{'content-type':'application/pdf','upsert':'true'})
-        return {'stored':True,'bucket':'resumes','path':path}
-    return {'stored':True,'bucket':'resumes','path':f'demo/{file.filename}','mode':'demo'}
+        path=f"{user['id']}/{uuid4()}.pdf"
+        try:
+            client().storage.from_('resumes').upload(path,content,{'content-type':'application/pdf','upsert':'false'})
+            metadata=OmenRepository(user['id']).save_resume_metadata(original,path,'application/pdf',len(content))
+            return {'stored':True,**metadata}
+        except Exception as exc:
+            log.exception('Resume upload failed for user %s',user['id'])
+            try: client().storage.from_('resumes').remove([path])
+            except Exception: log.warning('Resume cleanup failed for path %s',path)
+            raise HTTPException(502,'Resume storage is temporarily unavailable') from exc
+    return {'stored':True,'bucket':'resumes','path':f'demo/{uuid4()}.pdf','original_filename':original,'file_size':len(content),'mode':'demo'}
 
 @router.get('/tpo/polls')
 def polls():
@@ -279,9 +302,9 @@ def intelligence(authorization: str | None = Header(default=None)):
 
 @router.put('/students/me/profile')
 def update_profile(payload: ProfileUpdate, authorization: str | None = Header(default=None)):
+    user=_real_student(authorization)
     DEMO_STUDENT.update(payload.model_dump(exclude={'projects','internships'})); DEMO_STUDENT['experience']={'projects':payload.projects,'internships':payload.internships}
     if is_configured():
-        user=current_user(authorization)
         saved=OmenRepository(user['id']).save_student_profile({
             'full_name':payload.name,'student_id':payload.student_id,'department':payload.department,'degree':payload.degree,'branch':payload.branch,
             'semester':payload.semester,'graduation_year':payload.graduation_year,'tenth_percentage':payload.tenth_percentage,

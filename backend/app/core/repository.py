@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any
 from app.core.supabase import is_configured, client
 
@@ -29,6 +30,11 @@ class OmenRepository:
         client().table('profiles').upsert({'id':self.user_id}).execute()
         row=client().table('student_profiles').upsert({'user_id':self.user_id,'onboarding_draft':draft,'onboarding_step':step,'profile_completeness':completeness},on_conflict='user_id').execute().data
         return row[0] if row else {'onboarding_draft':draft,'onboarding_step':step,'profile_completeness':completeness}
+    def save_resume_metadata(self, original_filename: str, storage_path: str, content_type: str, file_size: int) -> dict[str, Any]:
+        sid=self._student_id()
+        if not sid: raise ValueError('Complete academic profile before uploading a resume')
+        rows=client().table('resumes').insert({'student_id':sid,'storage_path':storage_path,'original_filename':original_filename,'content_type':content_type,'file_size':file_size}).execute().data
+        return {'id':rows[0]['id'] if rows else str(uuid4()),'student_id':sid,'bucket':'resumes','storage_path':storage_path,'original_filename':original_filename,'content_type':content_type,'file_size':file_size,'uploaded_at':datetime.now(timezone.utc).isoformat()}
     def save_student_profile(self, profile: dict[str, Any], skills: dict[str,float]) -> dict[str, Any]:
         if not is_configured(): return profile
         db=client(); db.table('profiles').upsert({'id':self.user_id,'full_name':profile.get('full_name'),'department':profile.get('department')}).execute()
