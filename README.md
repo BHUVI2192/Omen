@@ -84,3 +84,20 @@ curl http://localhost:8000/api/v1/students/me/intelligence
 ## Product boundaries
 
 OMEN is not a job board, ATS, external recruitment portal, scraping platform, generic chatbot, or unsupported hiring predictor. External application URLs are recorded and opened after OMEN records the application.
+
+
+## Supabase integration status
+
+The active OMEN Supabase project has been initialized from the repository migrations. Migrations `202609100001_omen_core.sql`, `202609100002` storage policies, and `202609100003_omen_profile_outcomes.sql` create the core profile, skill, market, learning, project, placement, notification, resume, outcome, analytics, poll, and bootcamp relationships. Private storage buckets are created for resumes, certificates, project submissions, course resources, and company documents.
+
+When `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured in the backend, the API uses the authenticated Supabase user, persists onboarding profiles, uploads private resumes, persists course progress and projects, and reads jobs, applications, notifications, polls, and bootcamps from Supabase. Without those values, the API explicitly reports `demo_mode: true` and uses the controlled local fallback.
+
+The frontend now includes `/login`, `/auth/callback`, and `/onboarding`. Login uses Supabase Auth’s Google provider; the Google credentials remain configured in Supabase and are not stored in this repository. The backend exposes `/api/v1/auth/config` and `/api/v1/auth/me` for session-aware clients.
+
+## Current endpoint coverage
+
+Implemented endpoint families include health and auth, student profile and intelligence, resume upload, careers and what-if projections, market data, jobs, applications, application state updates, course catalog and progress, project submission, notifications, TPO overview, polls, bootcamp creation, and CSV result preview. The existing migration provides the persistent state needed to extend assessment, verification, shortlist, and outcome-confirmation endpoints without changing the core data model.
+
+## Production security follow-up
+
+The initial migration enables RLS on private user-owned tables and installs ownership policies. Supabase inspection also identified public reference/workflow tables that should receive deliberate read/write policies before exposing them directly through a browser client: `skills`, `roles`, `role_skills`, `companies`, `jobs`, `job_requirements`, `application_status_history`, `courses`, `course_phases`, `learning_resources`, `assessments`, `assessment_questions`, `student_course_progress`, `student_assessment_attempts`, `skill_verifications`, `market_snapshots`, `bootcamps`, `student_polls`, `poll_options`, and `poll_responses`. The server-side service-role path remains protected from the browser, but production rollout should complete these table-specific policies based on whether each table is public-readable, student-owned, or TPO-managed.

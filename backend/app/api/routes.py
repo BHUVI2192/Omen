@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Header
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from app.intelligence.engine import calculate_score, role_match, eligibility, ROLES, MARKET_SKILLS
+from app.core.config import settings
+from app.core.supabase import current_user, is_configured, client
+from app.core.repository import OmenRepository
 
 router = APIRouter()
 
@@ -31,6 +34,75 @@ class StatusUpdate(BaseModel):
 @router.get('/health')
 def health(): return {'status':'ok','service':'omen-api','timestamp':datetime.now(timezone.utc).isoformat()}
 
+@router.get('/auth/config')
+def auth_config():
+    return {'supabase_configured': is_configured(), 'demo_mode': not is_configured(), 'google_provider': 'Configure Google in Supabase Auth'}
+
+@router.get('/auth/me')
+def auth_me(authorization: str | None = Header(default=None)):
+    user = current_user(authorization)
+    return {'user': user, 'profile': OmenRepository(user['id']).student_profile() if is_configured() else DEMO_STUDENT}
+
+@router.get('/courses')
+def courses():
+    if is_configured():
+        return {'courses': client().table('courses').select('*,skills(name),course_phases(*)').order('title').execute().data}
+    return {'courses': [
+        {'id':'course-sql','title':'SQL for Decision Makers','description':'Query thinking, joins, aggregation, and analytical storytelling.','skill':'SQL','estimated_hours':24,'phases':['Foundation','Skill development','Practice','Project','Verification']},
+        {'id':'course-python','title':'Python for Analytics','description':'Build a practical analysis workflow from raw data to insight.','skill':'Python','estimated_hours':32,'phases':['Foundation','Data workflows','Practice','Project','Verification']}
+    ]}
+
+@router.post('/students/me/courses/{course_id}/progress')
+def update_course_progress(course_id: str, progress: float = 0, authorization: str | None = Header(default=None)):
+    if not 0 <= progress <= 100: raise HTTPException(422, 'Progress must be between 0 and 100')
+    if is_configured():
+        user=current_user(authorization); student=client().table('student_profiles').select('id').eq('user_id',user['id']).limit(1).execute()
+        course=client().table('courses').select('id').eq('id',course_id).limit(1).execute()
+        if not student.data or not course.data: raise HTTPException(404,'Course or student not found')
+        row=client().table('student_course_progress').upsert({'student_id':student.data[0]['id'],'course_id':course_id,'progress':progress}).execute().data
+        return {'progress': row[0] if row else {'course_id':course_id,'progress':progress}}
+    return {'progress': {'course_id':course_id, 'progress':progress, 'mode':'demo'}}
+
+class ProjectSubmission(BaseModel):
+    title: str = Field(min_length=2)
+    description: str = Field(min_length=20)
+    github_url: str
+    live_demo_url: str | None = None
+
+@router.post('/projects')
+def submit_project(payload: ProjectSubmission, authorization: str | None = Header(default=None)):
+    if is_configured():
+        user=current_user(authorization); student=client().table('student_profiles').select('id').eq('user_id',user['id']).limit(1).execute()
+        if not student.data: raise HTTPException(400,'Complete onboarding first')
+        row=client().table('projects').insert({**payload.model_dump(),'student_id':student.data[0]['id'],'status':'Submitted'}).execute().data
+        return {'project':row[0]}
+    return {'project': {'id':'demo-project','status':'Submitted', **payload.model_dump()}}
+
+@router.post('/resumes')
+async def upload_resume(file: UploadFile = File(...), authorization: str | None = Header(default=None)):
+    if file.content_type != 'application/pdf': raise HTTPException(415,'Only PDF resumes are accepted')
+    content=await file.read()
+    if len(content)>5*1024*1024: raise HTTPException(413,'Resume must be smaller than 5 MB')
+    if is_configured():
+        user=current_user(authorization); path=f"{user['id']}/{file.filename}"
+        client().storage.from_('resumes').upload(path,content,{'content-type':'application/pdf','upsert':'true'})
+        return {'stored':True,'bucket':'resumes','path':path}
+    return {'stored':True,'bucket':'resumes','path':f'demo/{file.filename}','mode':'demo'}
+
+@router.get('/tpo/polls')
+def polls():
+    if is_configured(): return {'polls':client().table('student_polls').select('*,poll_options(*)').eq('active',True).execute().data}
+    return {'polls':[{'id':'poll-1','question':'What skill would you like to learn next?','options':['AI/ML','Graphic Design','UI/UX','Cloud','Cybersecurity'],'responses':128}]}
+
+@router.post('/tpo/bootcamps')
+def create_bootcamp(title: str, target_skill: str, source: str = 'outcome-driven', authorization: str | None = Header(default=None)):
+    if not title.strip() or not target_skill.strip(): raise HTTPException(422,'Title and target skill are required')
+    if is_configured():
+        user=current_user(authorization); skill=client().table('skills').select('id').eq('name',target_skill).limit(1).execute()
+        row=client().table('bootcamps').insert({'title':title,'target_skill_id':skill.data[0]['id'] if skill.data else None,'source':source,'created_by':user['id']}).execute().data
+        return {'bootcamp':row[0]}
+    return {'bootcamp':{'id':'demo-bootcamp','title':title,'target_skill':target_skill,'source':source,'notifications_created':True}}
+
 @router.get('/me')
 def me(): return {'user':DEMO_STUDENT,'role':'student','demo_mode':True}
 
@@ -40,9 +112,16 @@ def intelligence():
     return {'score':result.score,'components':result.components,'positives':result.positives,'negatives':result.negatives,'gaps':result.gaps,'methodology':'Market-derived heuristic using normalized development-only demand snapshot; not a hiring probability.'}
 
 @router.put('/students/me/profile')
-def update_profile(payload: ProfileUpdate):
+def update_profile(payload: ProfileUpdate, authorization: str | None = Header(default=None)):
     DEMO_STUDENT.update(payload.model_dump(exclude={'projects','internships'})); DEMO_STUDENT['experience']={'projects':payload.projects,'internships':payload.internships}
-    return {'ok':True,'profile':DEMO_STUDENT}
+    if is_configured():
+        user=current_user(authorization)
+        saved=OmenRepository(user['id']).save_student_profile({
+            'full_name':payload.name,'department':payload.department,'branch':payload.branch,
+            'semester':payload.semester,'cgpa':payload.cgpa,'backlogs':payload.backlogs,
+        }, payload.skills)
+        return {'ok':True,'profile':saved,'mode':'supabase'}
+    return {'ok':True,'profile':DEMO_STUDENT,'mode':'demo'}
 
 @router.get('/careers')
 def careers(): return {'roles':[role_match(name,DEMO_STUDENT['skills']) | {'market_skills':req['skills']} for name,req in ROLES.items()]}
