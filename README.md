@@ -121,3 +121,14 @@ The OAuth callback checks the authenticated Supabase user, server-backed profile
 Phase 1 student APIs include `/api/v1/students/me/profile`, `/api/v1/students/me/intelligence`, `/api/v1/students/me/skill-gaps`, `/api/v1/careers`, `/api/v1/careers/{role}/what-if`, and `/api/v1/resumes`. Student workspace screens consume these APIs rather than duplicating intelligence calculations in React. Resume uploads remain PDF-only, private, and limited to 5 MB.
 
 Onboarding profile fields now persist graduation year, academics, experience counts, readiness signals, career intent-compatible profile data, and skills through the Phase 0 repository boundary. The Phase 1 schema addition is `202609110005_phase1_student_profile.sql`.
+
+
+## Phase 2 learning-to-verification loop
+
+Phase 2 adds database-backed learning and evidence workflows. Student routes are `/student/learning`, `/student/learning/[course_id]`, `/student/learning/[course_id]/assessment/[assessment_id]`, `/student/projects`, and `/student/projects/[project_id]`. TPO review is available at `/tpo/projects`.
+
+The learning flow is: course catalog → course phases and linked resources → persisted course progress → deterministic assessment attempt → persisted score and retry history → project submission → TPO verification or rework → verified skill evidence. Assessment grading is deterministic: MCQ answers use exact normalized comparison and fill-in-the-blank answers use case/whitespace-normalized comparison. Attempts are append-only for students; each retry receives a new attempt number.
+
+Project verification is TPO/admin controlled. Students can submit GitHub URLs, view their own projects and feedback, and resubmit after `Rework Required`. Students cannot set `Verified`, change TPO feedback, or alter assessment results. Verified project evidence is stored in `skill_verifications` and also updates the corresponding `student_skills` record with `source = verified_project` using the transparent rule `max(existing proficiency, verified project level)`; verification never arbitrarily inflates a skill. Subsequent intelligence and skill-gap reads consume the updated student skill evidence.
+
+Phase 2 schema migrations are `202609110006_phase2_learning_verification.sql`, `202609110007_phase2_security.sql`, and `202609110008_phase2_rework_security.sql`. RLS remains enabled on courses, resources, assessments, attempts, projects, and verification records. The intended course completion rule is: all required phases completed, a passing assessment, and a final project verified; course progress alone is not treated as verified skill.

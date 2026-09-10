@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.supabase import current_user, is_configured, client
 from app.core.repository import OmenRepository
 from app.core.authz import require_tpo
+from app.intelligence.assessment import grade_questions
 
 router = APIRouter()
 
@@ -13,6 +14,8 @@ DEMO_STUDENT = {'id':'demo-student','name':'Aarav Mehta','student_id':'OMEN-1024
 JOBS = [{'id':'job-1','company':'Northstar Labs','role':'Data Analyst','ctc':'₹12–16 LPA','location':'Bengaluru · Hybrid','minimum_cgpa':7.0,'allowed_branches':['CSE','IT','ECE'],'max_backlogs':0,'deadline':'2026-10-18','skills':['SQL','Python','Power BI','Statistics'],'description':'Own dashboards and analysis that help product teams make faster decisions.','external_url':'https://example.com/apply/northstar'}]
 APPLICATIONS=[]
 NOTIFICATIONS=[{'id':'n1','title':'Welcome to OMEN','body':'Your market intelligence workspace is ready. Start with your skill gaps.','type':'system','read':False}]
+DEMO_COURSES=[{'id':'course-sql','title':'SQL for Decision Makers','description':'Build query fluency and analytical confidence for data roles.','skill':'SQL','difficulty':'Beginner','estimated_hours':24,'phases':[{'id':'phase-sql-1','title':'SQL Fundamentals','resources':[{'id':'res-1','title':'SQL SELECT documentation','resource_type':'documentation','url':'https://www.postgresql.org/docs/current/sql-select.html','duration_minutes':25}]}],'assessment':{'id':'assessment-sql-1','title':'SQL foundations check','passing_score':70,'questions':[{'id':'q1','question':'Which clause filters rows before grouping?','question_type':'mcq','options':['WHERE','HAVING','ORDER BY','LIMIT'],'correct_answer':'WHERE','explanation':'WHERE filters rows before grouping.','skill_id':'SQL'},{'id':'q2','question':'Remove extra spaces and normalize casing: the keyword for grouping rows is ____','question_type':'fill_blank','options':[],'correct_answer':'group by','explanation':'GROUP BY groups rows for aggregation.','skill_id':'SQL'}]},'project':{'id':'project-sql-capstone','title':'SQL Analytics Capstone','objective':'Analyze a business dataset and communicate decisions.','requirements':['Use joins','Use aggregation','Include a README'],'required_skills':[{'skill':'SQL','level':75}],'status':'Not Started','verification_status':'Not Started'}}]
+DEMO_ATTEMPTS=[]; DEMO_PROJECTS=[]
 
 def _request_user(authorization: str | None):
     return current_user(authorization) if is_configured() else {'id':'demo-student','email':'demo@omen.local','role':'student'}
@@ -82,6 +85,16 @@ def courses():
         {'id':'course-python','title':'Python for Analytics','description':'Build a practical analysis workflow from raw data to insight.','skill':'Python','estimated_hours':32,'phases':['Foundation','Data workflows','Practice','Project','Verification']}
     ]}
 
+@router.get('/courses/{course_id}')
+def course_detail(course_id: str):
+    if is_configured():
+        row=OmenRepository('system').course(course_id)
+        if not row: raise HTTPException(404,'Course not found')
+        return {'course':row}
+    row=next((x for x in DEMO_COURSES if x['id']==course_id),None)
+    if not row: raise HTTPException(404,'Course not found')
+    return {'course':row}
+
 @router.post('/students/me/courses/{course_id}/progress')
 def update_course_progress(course_id: str, progress: float = 0, authorization: str | None = Header(default=None)):
     if not 0 <= progress <= 100: raise HTTPException(422, 'Progress must be between 0 and 100')
@@ -90,11 +103,70 @@ def update_course_progress(course_id: str, progress: float = 0, authorization: s
         return {'progress': row}
     return {'progress': {'course_id':course_id, 'progress':progress, 'mode':'demo'}}
 
+@router.get('/students/me/courses/{course_id}/progress')
+def get_course_progress(course_id: str, authorization: str | None = Header(default=None)):
+    if is_configured():
+        user=current_user(authorization); row=OmenRepository(user['id']).course_progress(course_id)
+        if not row: raise HTTPException(404,'Course or student not found')
+        return {'progress':row}
+    return {'progress':{'course_id':course_id,'progress':0,'mode':'demo'}}
+
+class AssessmentAttempt(BaseModel):
+    answers: dict[str,object]
+
+@router.get('/assessments/{assessment_id}')
+def get_assessment(assessment_id: str):
+    if is_configured():
+        row=OmenRepository('system').assessment(assessment_id)
+        if not row: raise HTTPException(404,'Assessment not found')
+        safe={**row,'assessment_questions':[{k:v for k,v in q.items() if k not in {'correct_answer'}} for q in row.get('assessment_questions',[])]}
+        return {'assessment':safe}
+    course=DEMO_COURSES[0]; assessment=course['assessment'] if course['assessment']['id']==assessment_id else None
+    if not assessment: raise HTTPException(404,'Assessment not found')
+    return {'assessment':{**assessment,'questions':[{k:v for k,v in q.items() if k!='correct_answer'} for q in assessment['questions']]}}
+
+@router.get('/assessments/{assessment_id}/attempts')
+def get_attempts(assessment_id: str, authorization: str | None = Header(default=None)):
+    if is_configured():
+        user=current_user(authorization); return {'attempts':OmenRepository(user['id']).attempts(assessment_id)}
+    return {'attempts':[x for x in DEMO_ATTEMPTS if x['assessment_id']==assessment_id]}
+
+@router.post('/assessments/{assessment_id}/attempts')
+def submit_attempt(assessment_id: str, payload: AssessmentAttempt, authorization: str | None = Header(default=None)):
+    if is_configured():
+        user=current_user(authorization); assessment=OmenRepository('system').assessment(assessment_id)
+        if not assessment: raise HTTPException(404,'Assessment not found')
+        result=grade_questions(assessment.get('assessment_questions',[]),payload.answers,float(assessment.get('passing_score',70)))
+        row=OmenRepository(user['id']).save_attempt(assessment_id,{'answers':payload.answers,'score':result['score'],'passed':result['passed'],'submitted_at':datetime.now(timezone.utc).isoformat()})
+        return {'attempt':row,'result':result}
+    assessment=next((c['assessment'] for c in DEMO_COURSES if c['assessment']['id']==assessment_id),None)
+    if not assessment: raise HTTPException(404,'Assessment not found')
+    result=grade_questions(assessment['questions'],payload.answers,assessment['passing_score']); attempt={'assessment_id':assessment_id,'attempt_number':len([x for x in DEMO_ATTEMPTS if x['assessment_id']==assessment_id])+1,'answers':payload.answers,'score':result['score'],'passed':result['passed']}; DEMO_ATTEMPTS.append(attempt); return {'attempt':attempt,'result':result}
+
 class ProjectSubmission(BaseModel):
     title: str = Field(min_length=2)
     description: str = Field(min_length=20)
     github_url: str
     live_demo_url: str | None = None
+
+class ProjectReview(BaseModel):
+    feedback: str | None = None
+
+@router.get('/projects')
+def list_projects(authorization: str | None = Header(default=None)):
+    if is_configured(): return {'projects':OmenRepository(current_user(authorization)['id']).projects()}
+    return {'projects':DEMO_PROJECTS}
+
+@router.get('/projects/{project_id}')
+def project_detail(project_id: str, authorization: str | None = Header(default=None)):
+    if is_configured():
+        try: row=OmenRepository(current_user(authorization)['id']).project(project_id)
+        except PermissionError as exc: raise HTTPException(403,str(exc))
+        if not row: raise HTTPException(404,'Project not found')
+        return {'project':row}
+    row=next((x for x in DEMO_PROJECTS if x['id']==project_id),next((c['project'] for c in DEMO_COURSES if c['project']['id']==project_id),None))
+    if not row: raise HTTPException(404,'Project not found')
+    return {'project':row}
 
 @router.post('/projects')
 def submit_project(payload: ProjectSubmission, authorization: str | None = Header(default=None)):
@@ -102,7 +174,43 @@ def submit_project(payload: ProjectSubmission, authorization: str | None = Heade
         user=current_user(authorization)
         try: return {'project':OmenRepository(user['id']).submit_project(payload.model_dump())}
         except ValueError as exc: raise HTTPException(400,str(exc))
-    return {'project': {'id':'demo-project','status':'Submitted', **payload.model_dump()}}
+    project={'id':f'demo-project-{len(DEMO_PROJECTS)+1}','status':'Submitted','verification_status':'Under Review',**payload.model_dump()}; DEMO_PROJECTS.append(project); return {'project': project}
+
+@router.post('/projects/{project_id}/submit')
+def resubmit_project(project_id: str, payload: ProjectSubmission, authorization: str | None = Header(default=None)):
+    if is_configured():
+        try: return {'project':OmenRepository(current_user(authorization)['id']).submit_existing_project(project_id,payload.model_dump())}
+        except ValueError as exc: raise HTTPException(400,str(exc))
+    row=next((x for x in DEMO_PROJECTS if x['id']==project_id),None)
+    if not row: raise HTTPException(404,'Project not found')
+    row.update(payload.model_dump()); row.update({'status':'Submitted','verification_status':'Under Review'}); return {'project':row}
+
+@router.get('/tpo/projects')
+def tpo_projects(status: str | None = None, authorization: str | None = Header(default=None)):
+    user=_request_tpo(authorization)
+    if is_configured(): return {'projects':OmenRepository(user['id']).tpo_projects(status)}
+    return {'projects':[x for x in DEMO_PROJECTS if not status or x.get('verification_status')==status]}
+
+@router.post('/tpo/projects/{project_id}/verify')
+def verify_project(project_id: str, payload: ProjectReview, authorization: str | None = Header(default=None)):
+    user=_request_tpo(authorization)
+    if is_configured():
+        try: return {'project':OmenRepository(user['id']).review_project(project_id,'Verified',payload.feedback)}
+        except ValueError as exc: raise HTTPException(404,str(exc))
+    row=next((x for x in DEMO_PROJECTS if x['id']==project_id),None)
+    if not row: raise HTTPException(404,'Project not found')
+    row.update({'verification_status':'Verified','status':'Verified','feedback':payload.feedback}); return {'project':row}
+
+@router.post('/tpo/projects/{project_id}/rework')
+def rework_project(project_id: str, payload: ProjectReview, authorization: str | None = Header(default=None)):
+    user=_request_tpo(authorization)
+    if not payload.feedback or len(payload.feedback.strip())<10: raise HTTPException(422,'Feedback is required for rework')
+    if is_configured():
+        try: return {'project':OmenRepository(user['id']).review_project(project_id,'Rework Required',payload.feedback)}
+        except ValueError as exc: raise HTTPException(404,str(exc))
+    row=next((x for x in DEMO_PROJECTS if x['id']==project_id),None)
+    if not row: raise HTTPException(404,'Project not found')
+    row.update({'verification_status':'Rework Required','status':'Rework Required','feedback':payload.feedback}); return {'project':row}
 
 @router.post('/resumes')
 async def upload_resume(file: UploadFile = File(...), authorization: str | None = Header(default=None)):

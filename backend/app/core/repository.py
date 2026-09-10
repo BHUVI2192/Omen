@@ -65,10 +65,71 @@ class OmenRepository:
     def courses(self):
         if not is_configured(): return None
         return client().table('courses').select('*,skills(name),course_phases(*)').order('title').execute().data
+    def course(self, course_id: str):
+        if not is_configured(): return None
+        rows=client().table('courses').select('*,skills(name),course_phases(*,learning_resources(*))').eq('id',course_id).limit(1).execute().data
+        if not rows: return None
+        assessments=client().table('assessments').select('*,assessment_questions(*)').eq('course_id',course_id).execute().data
+        rows[0]['assessments']=assessments
+        rows[0]['assessment']=assessments[0] if assessments else None
+        return rows[0]
+    def course_progress(self, course_id: str):
+        sid=self._student_id()
+        if not sid: return None
+        rows=client().table('student_course_progress').select('*').eq('student_id',sid).eq('course_id',course_id).limit(1).execute().data
+        return rows[0] if rows else {'student_id':sid,'course_id':course_id,'progress':0}
     def save_course_progress(self, course_id: str, progress: float) -> dict:
         sid=self._student_id(); rows=client().table('student_course_progress').upsert({'student_id':sid,'course_id':course_id,'progress':progress}).execute().data; return rows[0] if rows else {'course_id':course_id,'progress':progress}
     def submit_project(self, payload: dict) -> dict:
         sid=self._student_id(); rows=client().table('projects').insert({**payload,'student_id':sid,'status':'Submitted'}).execute().data; return rows[0]
+    def projects(self):
+        sid=self._student_id()
+        if not sid: return []
+        return client().table('projects').select('*,courses(title),profiles:verified_by(full_name)').eq('student_id',sid).order('created_at',desc=True).execute().data
+    def project(self, project_id: str):
+        rows=client().table('projects').select('*,courses(title),profiles:verified_by(full_name)').eq('id',project_id).limit(1).execute().data
+        if not rows: return None
+        row=rows[0]
+        sid=self._student_id()
+        if sid and row.get('student_id') != sid and self.role() not in {'tpo','admin'}: raise PermissionError('Project is not owned by this student')
+        return row
+    def submit_existing_project(self, project_id: str, payload: dict) -> dict:
+        sid=self._student_id(); rows=client().table('projects').update({**payload,'student_id':sid,'status':'Submitted','verification_status':'Under Review','submitted_at':datetime.now(timezone.utc).isoformat()}).eq('id',project_id).eq('student_id',sid).execute().data
+        if not rows: raise ValueError('Project not found or not owned by student')
+        return rows[0]
+    def tpo_projects(self, status: str | None = None):
+        query=client().table('projects').select('*,courses(title),student_profiles(student_id,user_id),profiles:verified_by(full_name)').order('submitted_at',desc=True)
+        if status: query=query.eq('verification_status',status)
+        return query.execute().data
+    def review_project(self, project_id: str, verification_status: str, feedback: str | None = None) -> dict:
+        if verification_status not in {'Verified','Rework Required'}: raise ValueError('Invalid review state')
+        row=client().table('projects').update({'verification_status':verification_status,'status':'Verified' if verification_status=='Verified' else 'Rework Required','feedback':feedback,'verified_by':self.user_id,'verified_at':datetime.now(timezone.utc).isoformat()}).eq('id',project_id).execute().data
+        if not row: raise ValueError('Project not found')
+        project=row[0]
+        if verification_status=='Verified':
+            for item in project.get('required_skills') or []:
+                skill_id=item.get('skill_id') if isinstance(item,dict) else None
+                skill_name=item.get('skill') if isinstance(item,dict) else None
+                level=float(item.get('level',70)) if isinstance(item,dict) else 70
+                if not skill_id and skill_name:
+                    found=client().table('skills').select('id').eq('name',skill_name).limit(1).execute().data
+                    skill_id=found[0]['id'] if found else None
+                if skill_id:
+                    client().table('skill_verifications').upsert({'student_id':project['student_id'],'skill_id':skill_id,'project_id':project_id,'verified_by':self.user_id,'level':level}).execute()
+                    existing=client().table('student_skills').select('proficiency').eq('student_id',project['student_id']).eq('skill_id',skill_id).limit(1).execute().data
+                    new_level=max(float(existing[0]['proficiency']) if existing else 0,level)
+                    client().table('student_skills').upsert({'student_id':project['student_id'],'skill_id':skill_id,'proficiency':new_level,'source':'verified_project','verified':True}).execute()
+            student=client().table('student_profiles').select('user_id').eq('id',project['student_id']).limit(1).execute().data
+            if student: client().table('notifications').insert({'user_id':student[0]['user_id'],'title':'Project verified','body':'Your project evidence has been verified by TPO.','type':'skill_verification'}).execute()
+        return project
+    def assessment(self, assessment_id: str):
+        rows=client().table('assessments').select('*,assessment_questions(*)').eq('id',assessment_id).limit(1).execute().data
+        return rows[0] if rows else None
+    def attempts(self, assessment_id: str):
+        sid=self._student_id(); return client().table('student_assessment_attempts').select('*').eq('assessment_id',assessment_id).eq('student_id',sid).order('attempt_number').execute().data
+    def save_attempt(self, assessment_id: str, payload: dict):
+        sid=self._student_id(); previous=self.attempts(assessment_id); payload.update({'student_id':sid,'assessment_id':assessment_id,'attempt_number':len(previous)+1})
+        rows=client().table('student_assessment_attempts').insert(payload).execute().data; return rows[0]
     def jobs_for_tpo(self):
         if not is_configured(): return None
         return client().table('jobs').select('*,companies(name),roles(name)').order('created_at',desc=True).execute().data
