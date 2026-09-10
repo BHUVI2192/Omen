@@ -2,20 +2,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 from fastapi import Header, HTTPException
-from app.core.config import settings
 
-log = logging.getLogger('omen.supabase')
+log = logging.getLogger('omen.legacy_auth')
+
+# Kept temporarily for the existing demo routes while persistence moves to SQLAlchemy.
 _client = None
-if settings.supabase_url and settings.supabase_service_role_key:
-    try:
-        from supabase import create_client
-        _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-    except Exception as exc:
-        log.exception('Supabase client initialization failed: %s', exc)
 
 
 def is_configured() -> bool:
-    return _client is not None
+    return False
 
 
 def client():
