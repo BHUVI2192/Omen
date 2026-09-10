@@ -23,7 +23,7 @@ class OmenRepository:
     def save_student_profile(self, profile: dict[str, Any], skills: dict[str,float]) -> dict[str, Any]:
         if not is_configured(): return profile
         db=client(); db.table('profiles').upsert({'id':self.user_id,'full_name':profile.get('full_name'),'department':profile.get('department')}).execute()
-        student={k:profile[k] for k in ('student_id','branch','semester','cgpa','backlogs','tenth_percentage','twelfth_percentage','career_intent') if k in profile}; student.update({'user_id':self.user_id,'onboarding_complete':True})
+        student={k:profile[k] for k in ('student_id','branch','semester','graduation_year','cgpa','backlogs','tenth_percentage','twelfth_percentage','career_intent','projects_count','internships_count','hackathons_count','open_source_count','freelance_count','readiness_signals') if k in profile}; student.update({'user_id':self.user_id,'onboarding_complete':True})
         row=db.table('student_profiles').upsert(student,on_conflict='user_id').execute().data[0]
         for name,proficiency in skills.items():
             found=db.table('skills').select('id').eq('name',name).limit(1).execute().data

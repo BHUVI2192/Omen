@@ -110,3 +110,14 @@ Phase 0 centralizes persistence through `OmenRepository`. When Supabase is confi
 FastAPI authorization helpers now expose reusable authentication, student, TPO, and admin checks. The authenticated role is read from the server-side `profiles` record and is never trusted from the browser. TPO analytics, status changes, bootcamp creation, and result preview reject non-TPO users with HTTP 403 when production authentication is active.
 
 Migration `202609100004_phase0_rls.sql` enables RLS across all current public tables. Public reference tables are authenticated-read/TPO-managed, student-owned records are restricted through `auth.uid()` ownership checks, workflow history and outcomes are visible to the relevant student or TPO, and institutional analytics is TPO-only. The migration has been applied to the active OMEN Supabase project.
+
+
+## Phase 1 student workspace
+
+The public root route is now landing-only. It no longer renders a student dashboard. The explicit demo experience is available at `/demo`. Authenticated students use `/student/dashboard`, `/student/career-dna`, `/student/market-score`, `/student/careers`, `/student/skill-gaps`, and `/student/profile`.
+
+The OAuth callback checks the authenticated Supabase user, server-backed profile role, and student profile existence. Existing students go to `/student/dashboard`; users without a student profile go to `/onboarding`; TPO/admin users are directed to the TPO route boundary.
+
+Phase 1 student APIs include `/api/v1/students/me/profile`, `/api/v1/students/me/intelligence`, `/api/v1/students/me/skill-gaps`, `/api/v1/careers`, `/api/v1/careers/{role}/what-if`, and `/api/v1/resumes`. Student workspace screens consume these APIs rather than duplicating intelligence calculations in React. Resume uploads remain PDF-only, private, and limited to 5 MB.
+
+Onboarding profile fields now persist graduation year, academics, experience counts, readiness signals, career intent-compatible profile data, and skills through the Phase 0 repository boundary. The Phase 1 schema addition is `202609110005_phase1_student_profile.sql`.

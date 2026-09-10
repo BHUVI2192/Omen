@@ -22,16 +22,32 @@ def _request_tpo(authorization: str | None):
     if is_configured(): require_tpo(user)
     return user
 
+def _student_data(authorization: str | None):
+    user=_request_user(authorization)
+    if is_configured():
+        profile=OmenRepository(user['id']).student_profile()
+        if not profile: raise HTTPException(404,'Student onboarding is incomplete')
+        return user, profile
+    return user, DEMO_STUDENT
+
 class ProfileUpdate(BaseModel):
     name: str = Field(min_length=2)
+    student_id: str | None = None
     department: str
     branch: str
     semester: int = Field(ge=1, le=12)
+    graduation_year: int | None = None
+    tenth_percentage: float | None = Field(default=None, ge=0, le=100)
+    twelfth_percentage: float | None = Field(default=None, ge=0, le=100)
     cgpa: float = Field(ge=0, le=10)
     backlogs: int = Field(ge=0)
     skills: dict[str,float]
     projects: int = Field(ge=0, le=20)
     internships: int = Field(ge=0, le=10)
+    hackathons: int = Field(default=0, ge=0, le=20)
+    open_source: int = Field(default=0, ge=0, le=20)
+    freelancing: int = Field(default=0, ge=0, le=20)
+    readiness_signals: dict[str,float] = {}
 
 class ApplicationCreate(BaseModel):
     job_id: str
@@ -51,6 +67,11 @@ def auth_config():
 def auth_me(authorization: str | None = Header(default=None)):
     user = current_user(authorization)
     return {'user': user, 'profile': OmenRepository(user['id']).student_profile() if is_configured() else DEMO_STUDENT}
+
+@router.get('/students/me/profile')
+def get_student_profile(authorization: str | None = Header(default=None)):
+    _, profile=_student_data(authorization)
+    return {'profile':profile,'mode':'supabase' if is_configured() else 'demo'}
 
 @router.get('/courses')
 def courses():
@@ -111,8 +132,9 @@ def create_bootcamp(title: str, target_skill: str, source: str = 'outcome-driven
 def me(): return {'user':DEMO_STUDENT,'role':'student','demo_mode':True}
 
 @router.get('/students/me/intelligence')
-def intelligence():
-    result=calculate_score(DEMO_STUDENT['skills'],DEMO_STUDENT['experience'],DEMO_STUDENT['assessments'])
+def intelligence(authorization: str | None = Header(default=None)):
+    _, student=_student_data(authorization)
+    result=calculate_score(student.get('skills',{}),student.get('experience',{}),student.get('assessments',{}))
     return {'score':result.score,'components':result.components,'positives':result.positives,'negatives':result.negatives,'gaps':result.gaps,'methodology':'Market-derived heuristic using normalized development-only demand snapshot; not a hiring probability.'}
 
 @router.put('/students/me/profile')
@@ -121,21 +143,38 @@ def update_profile(payload: ProfileUpdate, authorization: str | None = Header(de
     if is_configured():
         user=current_user(authorization)
         saved=OmenRepository(user['id']).save_student_profile({
-            'full_name':payload.name,'department':payload.department,'branch':payload.branch,
-            'semester':payload.semester,'cgpa':payload.cgpa,'backlogs':payload.backlogs,
+            'full_name':payload.name,'student_id':payload.student_id,'department':payload.department,'branch':payload.branch,
+            'semester':payload.semester,'graduation_year':payload.graduation_year,'tenth_percentage':payload.tenth_percentage,
+            'twelfth_percentage':payload.twelfth_percentage,'cgpa':payload.cgpa,'backlogs':payload.backlogs,
+            'projects_count':payload.projects,'internships_count':payload.internships,'hackathons_count':payload.hackathons,
+            'open_source_count':payload.open_source,'freelance_count':payload.freelancing,'readiness_signals':payload.readiness_signals,
         }, payload.skills)
         return {'ok':True,'profile':saved,'mode':'supabase'}
     return {'ok':True,'profile':DEMO_STUDENT,'mode':'demo'}
 
+@router.get('/students/me/skill-gaps')
+def skill_gaps(role: str = 'Data Analyst', authorization: str | None = Header(default=None)):
+    _, student=_student_data(authorization)
+    if role not in ROLES: raise HTTPException(404,'Unknown role')
+    rows=[]
+    for skill, required in ROLES[role]['skills'].items():
+        current=float(student.get('skills',{}).get(skill,0)); gap=max(0,round(required*100-current))
+        if gap: rows.append({'skill':skill,'current':round(current),'required':round(required*100),'gap':gap,'importance':'Critical' if required>=.8 else 'High' if required>=.65 else 'Medium','estimated_hours':max(4,round(gap*.55))})
+    return {'role':role,'strengths':[k for k,v in ROLES[role]['skills'].items() if student.get('skills',{}).get(k,0)>=v*100],'gaps':sorted(rows,key=lambda x:(x['importance']!='Critical',x['importance']!='High',-x['gap']))}
+
 @router.get('/careers')
-def careers(): return {'roles':[role_match(name,DEMO_STUDENT['skills']) | {'market_skills':req['skills']} for name,req in ROLES.items()]}
+def careers(authorization: str | None = Header(default=None)):
+    _, student=_student_data(authorization)
+    return {'roles':[role_match(name,student.get('skills',{})) | {'market_skills':req['skills']} for name,req in ROLES.items()]}
 
 @router.get('/careers/{role}/what-if')
-def what_if(role:str, skill:str, target:float):
+def what_if(role:str, skill:str, target:float, authorization: str | None = Header(default=None)):
     if role not in ROLES: raise HTTPException(404,'Unknown role')
-    current=calculate_score(DEMO_STUDENT['skills'],DEMO_STUDENT['experience'],DEMO_STUDENT['assessments']).score
-    simulated={**DEMO_STUDENT['skills'],skill:target}; projected=calculate_score(simulated,DEMO_STUDENT['experience'],DEMO_STUDENT['assessments']).score
-    return {'label':'Projected impact','current_score':current,'projected_score':projected,'role_match':role_match(role,simulated),'disclaimer':'This is a scenario, not a guaranteed outcome.'}
+    _, student=_student_data(authorization)
+    current=calculate_score(student.get('skills',{}),student.get('experience',{}),student.get('assessments',{})).score
+    simulated={**student.get('skills',{}),skill:target}; projected=calculate_score(simulated,student.get('experience',{}),student.get('assessments',{})).score
+    current_match=role_match(role,student.get('skills',{})); projected_match=role_match(role,simulated)
+    return {'label':'Projected impact','current_score':current,'projected_score':projected,'current_match':current_match['match'],'projected_match':projected_match['match'],'role_match':projected_match,'disclaimer':'This is a scenario, not a guaranteed outcome.'}
 
 @router.get('/market')
 def market(): return {'source':'Development fallback snapshot','skills':[{'name':k,'demand':round(v*100),'trend':'rising' if v>.7 else 'steady'} for k,v in MARKET_SKILLS.items()]}
