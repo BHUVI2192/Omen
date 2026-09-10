@@ -20,6 +20,25 @@ APPLICATIONS=[]
 NOTIFICATIONS=[{'id':'n1','title':'Welcome to OMEN','body':'Your market intelligence workspace is ready. Start with your skill gaps.','type':'system','read':False}]
 DEMO_COURSES=[{'id':'course-sql','title':'SQL for Decision Makers','description':'Build query fluency and analytical confidence for data roles.','skill':'SQL','difficulty':'Beginner','estimated_hours':24,'phases':[{'id':'phase-sql-1','title':'SQL Fundamentals','resources':[{'id':'res-1','title':'SQL SELECT documentation','resource_type':'documentation','url':'https://www.postgresql.org/docs/current/sql-select.html','duration_minutes':25}]}],'assessment':{'id':'assessment-sql-1','title':'SQL foundations check','passing_score':70,'questions':[{'id':'q1','question':'Which clause filters rows before grouping?','question_type':'mcq','options':['WHERE','HAVING','ORDER BY','LIMIT'],'correct_answer':'WHERE','explanation':'WHERE filters rows before grouping.','skill_id':'SQL'},{'id':'q2','question':'Remove extra spaces and normalize casing: the keyword for grouping rows is ____','question_type':'fill_blank','options':[],'correct_answer':'group by','explanation':'GROUP BY groups rows for aggregation.','skill_id':'SQL'}]},'project':{'id':'project-sql-capstone','title':'SQL Analytics Capstone','objective':'Analyze a business dataset and communicate decisions.','requirements':['Use joins','Use aggregation','Include a README'],'required_skills':[{'skill':'SQL','level':75}],'status':'Not Started','verification_status':'Not Started'}}]
 DEMO_ATTEMPTS=[]; DEMO_PROJECTS=[]
+DEMO_FREE_COURSES=[
+ {'id':'course-python-foundations','title':'Python Foundations','description':'Free-source implementation plan: syntax, data structures, testing, and a CLI expense tracker.','skill':'Python','difficulty':'Beginner','estimated_hours':20,'source':'https://www.freecodecamp.org/learn/python-v9/'},
+ {'id':'course-web-foundations','title':'Web Foundations: HTML and CSS','description':'Free-source implementation plan: accessible structure, responsive layout, and a portfolio landing page.','skill':'HTML','difficulty':'Beginner','estimated_hours':18,'source':'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Structuring_content'},
+ {'id':'course-javascript-interfaces','title':'JavaScript for Interfaces','description':'Free-source implementation plan: browser state, events, APIs, and a habit tracker.','skill':'JavaScript','difficulty':'Beginner','estimated_hours':24,'source':'https://www.freecodecamp.org/learn/javascript-v9/'},
+ {'id':'course-react-engineering','title':'React Frontend Engineering','description':'Free-source implementation plan: components, state, data loading, and a dashboard.','skill':'React','difficulty':'Intermediate','estimated_hours':22,'source':'https://react.dev/learn'},
+ {'id':'course-git-delivery','title':'Git and Collaborative Delivery','description':'Free-source implementation plan: branches, reviews, merges, releases, and a team workflow.','skill':'Git','difficulty':'Beginner','estimated_hours':10,'source':'https://git-scm.com/book/en/v2'},
+ {'id':'course-sql-data','title':'SQL and Relational Data','description':'Free-source implementation plan: normalized schemas, joins, analytics, and decision storytelling.','skill':'SQL','difficulty':'Beginner','estimated_hours':24,'source':'https://www.freecodecamp.org/learn/relational-databases/'},
+ {'id':'course-fastapi-backend','title':'FastAPI Backend Development','description':'Free-source implementation plan: validated REST API, auth, tests, and OpenAPI.','skill':'FastAPI','difficulty':'Intermediate','estimated_hours':26,'source':'https://fastapi.tiangolo.com/tutorial/'},
+ {'id':'course-rest-integration','title':'REST APIs and Integration','description':'Free-source implementation plan: HTTP, API contracts, retries, validation, and error states.','skill':'FastAPI','difficulty':'Intermediate','estimated_hours':16,'source':'https://developer.mozilla.org/en-US/docs/Web/HTTP'},
+ {'id':'course-docker-delivery','title':'Docker and Reproducible Delivery','description':'Free-source implementation plan: containerize a service, add health checks, and document deployment.','skill':'Docker','difficulty':'Intermediate','estimated_hours':18,'source':'https://docs.docker.com/get-started/'},
+ {'id':'course-dsa','title':'Data Structures and Algorithms','description':'Free-source implementation plan: implement, test, and benchmark an algorithm library.','skill':'DSA','difficulty':'Intermediate','estimated_hours':30,'source':'https://www.freecodecamp.org/learn/javascript-algorithms-and-data-structures-v8/'},
+ {'id':'course-statistics','title':'Statistics for Product Decisions','description':'Free-source implementation plan: analyze an experiment and communicate uncertainty.','skill':'Statistics','difficulty':'Beginner','estimated_hours':20,'source':'https://www.khanacademy.org/math/statistics-probability'},
+ {'id':'course-ml','title':'Practical Machine Learning','description':'Free-source implementation plan: train, evaluate, and explain a small classifier.','skill':'Python','difficulty':'Intermediate','estimated_hours':28,'source':'https://developers.google.com/machine-learning/crash-course'},
+ {'id':'course-cloud','title':'Cloud Fundamentals','description':'Free-source implementation plan: deploy a service with logs, secrets, and cost-aware architecture.','skill':'Cloud','difficulty':'Beginner','estimated_hours':16,'source':'https://aws.amazon.com/training/digital/'},
+ {'id':'course-testing','title':'Testing Python Applications','description':'Free-source implementation plan: build a test pyramid with failure-path coverage.','skill':'FastAPI','difficulty':'Intermediate','estimated_hours':14,'source':'https://docs.pytest.org/en/stable/getting-started.html'},
+ {'id':'course-system-design','title':'System Design and Technical Interviews','description':'Free-source implementation plan: design a URL shortener and defend trade-offs.','skill':'DSA','difficulty':'Advanced','estimated_hours':20,'source':'https://www.freecodecamp.org/news/systems-design-for-interviews/'},
+]
+for course in DEMO_FREE_COURSES:
+    course['phases']=[{'id':course['id']+'-p1','title':'Understand the foundations','resources':[{'id':course['id']+'-r1','title':'Official free source','url':course['source'],'estimated_minutes':course['estimated_hours']*20}]},{'id':course['id']+'-p2','title':'Build the guided implementation','resources':[]},{'id':course['id']+'-p3','title':'Ship evidence and reflect','resources':[]}]
 ONBOARDING_CATALOGS={'departments':['Computer Science & Engineering','Information Technology','Artificial Intelligence & Machine Learning','Artificial Intelligence & Data Science','Electronics & Communication Engineering','Electrical & Electronics Engineering','Electrical Engineering','Mechanical Engineering','Civil Engineering','Chemical Engineering','Biotechnology','Other'],'degrees':['B.Tech','B.E.','M.Tech','M.E.','BCA','MCA','B.Sc.','M.Sc.','Other'],'skills':['Python','Java','C','C++','JavaScript','TypeScript','Go','Rust','React','Next.js','Node.js','Express','HTML','CSS','Tailwind','SQL','Pandas','NumPy','TensorFlow','PyTorch','Scikit-learn','Machine Learning','Deep Learning','LLMs','AWS','Azure','GCP','Docker','Kubernetes','Git','GitHub','CI/CD'],'roles':['Software Engineer','Frontend Developer','Backend Developer','Full Stack Developer','Data Analyst','Data Scientist','ML Engineer','AI Engineer','Cloud Engineer','DevOps Engineer','Cybersecurity Engineer','Product Manager','UI/UX Designer'],'industries':['Technology','FinTech','Healthcare','Automotive','Consulting','E-commerce','Gaming','EdTech','Research','Government'],'proficiency_levels':['Beginner','Developing','Proficient','Advanced'],'readiness_levels':['Just starting','Developing','Comfortable','Strong'],'practice_frequency':['Rarely','1–2 days/week','3–4 days/week','Almost every day']}
 
 def _request_user(authorization: str | None):
@@ -123,10 +142,7 @@ def save_onboarding(payload: OnboardingDraft, authorization: str | None = Header
 def courses():
     if is_configured():
         return {'courses': OmenRepository('system').courses() or []}
-    return {'courses': [
-        {'id':'course-sql','title':'SQL for Decision Makers','description':'Query thinking, joins, aggregation, and analytical storytelling.','skill':'SQL','estimated_hours':24,'phases':['Foundation','Skill development','Practice','Project','Verification']},
-        {'id':'course-python','title':'Python for Analytics','description':'Build a practical analysis workflow from raw data to insight.','skill':'Python','estimated_hours':32,'phases':['Foundation','Data workflows','Practice','Project','Verification']}
-    ]}
+    return {'courses': [DEMO_COURSES[0]] + DEMO_FREE_COURSES[:14]}
 
 @router.get('/courses/{course_id}')
 def course_detail(course_id: str):
@@ -134,7 +150,7 @@ def course_detail(course_id: str):
         row=OmenRepository('system').course(course_id)
         if not row: raise HTTPException(404,'Course not found')
         return {'course':row}
-    row=next((x for x in DEMO_COURSES if x['id']==course_id),None)
+    row=next((x for x in (DEMO_COURSES+DEMO_FREE_COURSES) if x['id']==course_id),None)
     if not row: raise HTTPException(404,'Course not found')
     return {'course':row}
 

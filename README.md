@@ -192,3 +192,24 @@ PYTHONPATH=. python -m ml.training.train_all
 ```
 
 The generated registry metadata records model name, version, dataset, feature version, metrics, synthetic flag, and weights. Synthetic metrics are labeled `synthetic_development_evaluation`. No model trains during API startup or request handling.
+
+
+## Phase 4 course catalog and development stabilization
+
+The learning catalog now contains **15 connected implementation courses** in both the Supabase migration and local demo fallback. Each course includes a difficulty, estimated effort, a three-phase implementation plan, a concrete build outcome, and a free authoritative source. The catalog reuses the existing Phase 2 `courses`, `course_phases`, and `learning_resources` entities; it does not create a competing course system.
+
+The free-source catalog includes Python, HTML/CSS, JavaScript, React, Git, SQL, FastAPI, REST/HTTP, Docker, data structures, statistics, machine learning, cloud fundamentals, Python testing, and system design/interviews. Sources include [freeCodeCamp](https://www.freecodecamp.org/), [MDN Learn](https://developer.mozilla.org/en-US/docs/Learn), [React Learn](https://react.dev/learn), [FastAPI Tutorial](https://fastapi.tiangolo.com/tutorial/), [Docker Get Started](https://docs.docker.com/get-started/), [Google ML Crash Course](https://developers.google.com/machine-learning/crash-course), [Khan Academy Statistics](https://www.khanacademy.org/math/statistics-probability), [AWS Digital Training](https://aws.amazon.com/training/digital/), and [pytest documentation](https://docs.pytest.org/en/stable/getting-started.html). Source claims are intentionally limited to publicly accessible learning material; OMEN does not copy or redistribute third-party course content.
+
+### Development error fix
+
+The recurring blank dashboard and `globalError` were reproduced in Next.js development logs. The actual failure was the Next.js 15.5 development Segment Explorer attempting to load a missing React Client Manifest module:
+
+```text
+Could not find the module ... next-devtools/userspace/app/segment-explorer-node.js#SegmentViewNode in the React Client Manifest
+```
+
+This was a framework development-tool crash, not an OMEN student-data exception. `frontend/next.config.mjs` now disables `devIndicators`, which removes the broken devtools path while retaining normal compile/runtime error reporting. The root layout also uses `suppressHydrationWarning` on the framework-owned HTML/body boundaries. Production builds remain unaffected. Manual development verification now renders the expected authentication gate without the blank page or hydration/devtools error.
+
+### Resume upload UX
+
+Onboarding resume upload now has explicit state feedback: `Uploading securely…`, selected filename, animated progress, `Resume uploaded successfully`, private-storage confirmation, and visible error messages. The frontend accepts the production `storage_path` response as well as the local demo `path`, fixing the prior case where a successful upload was stored but not shown in the profile form.
