@@ -34,13 +34,14 @@ def current_user(authorization: str | None = Header(default=None)) -> dict[str, 
     token = bearer_token(authorization)
     if _client is None:
         if token == 'demo-token':
-            return {'id': 'demo-student', 'email': 'demo@omen.local'}
+            return {'id': 'demo-student', 'email': 'demo@omen.local', 'role': 'student'}
         raise HTTPException(401, 'Invalid development token')
     try:
         result = _client.auth.get_user(token)
         if not result.user:
             raise HTTPException(401, 'Invalid session')
-        return {'id': str(result.user.id), 'email': result.user.email}
+        profile = _client.table('profiles').select('role').eq('id', str(result.user.id)).limit(1).execute().data
+        return {'id': str(result.user.id), 'email': result.user.email, 'role': profile[0]['role'] if profile else 'student'}
     except HTTPException:
         raise
     except Exception as exc:

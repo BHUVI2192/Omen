@@ -101,3 +101,12 @@ Implemented endpoint families include health and auth, student profile and intel
 ## Production security follow-up
 
 The initial migration enables RLS on private user-owned tables and installs ownership policies. Supabase inspection also identified public reference/workflow tables that should receive deliberate read/write policies before exposing them directly through a browser client: `skills`, `roles`, `role_skills`, `companies`, `jobs`, `job_requirements`, `application_status_history`, `courses`, `course_phases`, `learning_resources`, `assessments`, `assessment_questions`, `student_course_progress`, `student_assessment_attempts`, `skill_verifications`, `market_snapshots`, `bootcamps`, `student_polls`, `poll_options`, and `poll_responses`. The server-side service-role path remains protected from the browser, but production rollout should complete these table-specific policies based on whether each table is public-readable, student-owned, or TPO-managed.
+
+
+## Phase 0 foundation
+
+Phase 0 centralizes persistence through `OmenRepository`. When Supabase is configured, application creation, application status changes, status history, notifications, course progress, project submission, bootcamp creation, polls, jobs, courses, profiles, and intelligence reference data use the repository or its service boundary instead of the in-memory demo lists. The demo lists remain available only when Supabase is unavailable.
+
+FastAPI authorization helpers now expose reusable authentication, student, TPO, and admin checks. The authenticated role is read from the server-side `profiles` record and is never trusted from the browser. TPO analytics, status changes, bootcamp creation, and result preview reject non-TPO users with HTTP 403 when production authentication is active.
+
+Migration `202609100004_phase0_rls.sql` enables RLS across all current public tables. Public reference tables are authenticated-read/TPO-managed, student-owned records are restricted through `auth.uid()` ownership checks, workflow history and outcomes are visible to the relevant student or TPO, and institutional analytics is TPO-only. The migration has been applied to the active OMEN Supabase project.
