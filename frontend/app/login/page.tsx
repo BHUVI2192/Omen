@@ -1,5 +1,18 @@
 'use client';
-import {useState} from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import {supabaseBrowser} from '../../lib/supabase-browser';
-export default function Login(){const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);const login=async()=>{setError('');setBusy(true);const supabase=supabaseBrowser();if(!supabase){setError('Authentication is not configured for this environment.');setBusy(false);return}const result=await supabase.auth.signInWithPassword({email,password});if(result.error)setError(result.error.message);else location.href='/student/dashboard';setBusy(false)};const google=async()=>{const supabase=supabaseBrowser();if(!supabase){setError('Authentication is not configured for this environment.');return}const {error}=await supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:`${location.origin}/auth/callback`}});if(error)setError(error.message)};return <main className="auth-page"><div className="auth-card"><Link href="/" className="brand">OMEN<span>.</span></Link><div className="eyebrow">Secure sign in</div><h1>Welcome <em>back.</em></h1><p>Continue building a career signal grounded in your actual work.</p><button className="auth-google" onClick={google}>Continue with Google <span>→</span></button><div className="auth-divider"><span>or continue with email</span></div><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{error&&<div className="onboarding-error">{error}</div>}<button className="btn auth-submit" disabled={busy||!email||!password} onClick={login}>{busy?'Signing in…':'Sign in →'}</button><p className="auth-foot">New to OMEN? <Link href="/signup">Create an account</Link></p></div></main>}
+import { localAuth } from '../../lib/local-auth';
+
+export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError('');
+    try { await localAuth('/auth/login', { email, password }); location.href = '/student/dashboard'; }
+    catch (e) { setError(e instanceof Error ? e.message : 'Unable to sign in'); }
+    finally { setBusy(false); }
+  }
+  return <main className="auth-page local-auth"><div className="auth-card"><Link href="/" className="brand local-brand">OMEN<span>.</span></Link><div className="eyebrow">Student workspace</div><h1>Welcome <em>back.</em></h1><p>Sign in to see the readiness signal built from your profile, skills, and learning progress.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label>{error && <div className="auth-error">{error}</div>}<button className="btn auth-submit" disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button></form><p className="auth-foot">New student? <Link href="/signup">Create an account</Link></p></div></main>;
+}

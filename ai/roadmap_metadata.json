@@ -1,0 +1,35 @@
+{
+  "component": "HETU Personalized Learning / Roadmap Recommendation",
+  "version": "1.0",
+  "type": "rule_based_recommendation_engine",
+  "supported_roles": [
+    "Software Engineer",
+    "Backend Developer",
+    "Frontend Developer",
+    "Full Stack Developer",
+    "Data Analyst",
+    "Data Engineer",
+    "ML Engineer",
+    "QA Engineer",
+    "DevOps Engineer",
+    "Business Analyst"
+  ],
+  "inputs": [
+    "target_role",
+    "skill_gaps",
+    "placement_probability",
+    "verified_skills"
+  ],
+  "outputs": [
+    "prioritized roadmap",
+    "estimated total weeks",
+    "reason per recommendation"
+  ],
+  "design": "Prioritize role-relevant high-severity skill gaps, adjust urgency using readiness probability, and reduce recommendations for already-verified skills.",
+  "ml_status": "Not trained ML; deliberately deterministic for hackathon MVP because credible course-completion-to-outcome labels are unavailable.",
+  "limitations": [
+    "Does not estimate causal effect of course completion on placement.",
+    "Course catalog is prototype/synthetic and should be replaced by institutional catalog data.",
+    "Recommendations should be evaluated using actual completion and outcome history in production."
+  ]
+}

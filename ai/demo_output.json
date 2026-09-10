@@ -1,0 +1,54 @@
+{
+  "target_role": "Backend Developer",
+  "placement_probability": 0.42,
+  "roadmap": [
+    {
+      "priority": 1,
+      "skill": "Node.js",
+      "course": "Node.js Backend Development",
+      "reason": "High skill gap for Backend Developer",
+      "severity": "high",
+      "estimated_weeks": 5,
+      "target_role": "Backend Developer"
+    },
+    {
+      "priority": 2,
+      "skill": "REST",
+      "course": "REST API Development",
+      "reason": "High skill gap for Backend Developer",
+      "severity": "high",
+      "estimated_weeks": 4,
+      "target_role": "Backend Developer"
+    },
+    {
+      "priority": 3,
+      "skill": "SQL",
+      "course": "SQL & PostgreSQL Fundamentals",
+      "reason": "High skill gap for Backend Developer",
+      "severity": "high",
+      "estimated_weeks": 3,
+      "target_role": "Backend Developer"
+    },
+    {
+      "priority": 4,
+      "skill": "Docker",
+      "course": "Docker Fundamentals",
+      "reason": "Medium skill gap for Backend Developer",
+      "severity": "medium",
+      "estimated_weeks": 3,
+      "target_role": "Backend Developer"
+    },
+    {
+      "priority": 5,
+      "skill": "JWT",
+      "course": "Authentication & JWT",
+      "reason": "Role-relevant skill for Backend Developer",
+      "severity": "low",
+      "estimated_weeks": 2,
+      "target_role": "Backend Developer"
+    }
+  ],
+  "estimated_total_weeks": 17,
+  "method": "rule_based_skill_gap_role_recommendation",
+  "note": "Recommendations are prototype guidance, not guaranteed placement outcomes."
+}

@@ -1,0 +1,54 @@
+{
+  "student_id": "S08082",
+  "target_role": "Backend Developer",
+  "placement_probability_before_learning": 0.2204,
+  "skill_gaps": [
+    {
+      "skill": "Node.js",
+      "severity": "high",
+      "gap_score": 82
+    },
+    {
+      "skill": "REST",
+      "severity": "high",
+      "gap_score": 76
+    },
+    {
+      "skill": "SQL",
+      "severity": "high",
+      "gap_score": 65
+    },
+    {
+      "skill": "Docker",
+      "severity": "medium",
+      "gap_score": 45
+    }
+  ],
+  "roadmap_preview": [
+    {
+      "priority": 1,
+      "course": "Node.js Backend Development",
+      "skill": "Node.js",
+      "estimated_weeks": 5
+    },
+    {
+      "priority": 2,
+      "course": "REST API Development",
+      "skill": "REST",
+      "estimated_weeks": 4
+    },
+    {
+      "priority": 3,
+      "course": "SQL & PostgreSQL Fundamentals",
+      "skill": "SQL",
+      "estimated_weeks": 3
+    },
+    {
+      "priority": 4,
+      "course": "Docker Fundamentals",
+      "skill": "Docker",
+      "estimated_weeks": 3
+    }
+  ],
+  "interpretation": "The roadmap prioritizes the highest gaps that are directly relevant to the selected Backend Developer role."
+}
