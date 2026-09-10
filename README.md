@@ -1,5 +1,34 @@
 # OMEN
 
+## Local backend foundation
+
+The active backend development path uses local PostgreSQL through Docker Compose.
+Supabase is not required or used by the backend foundation.
+
+```bash
+cd backend
+cp ../.env.example .env
+docker compose up -d db
+python -m pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+Verify the service and database:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/health/db
+pytest -q
+```
+
+`docker compose up` also starts the API container and applies migrations before
+Uvicorn starts. PostgreSQL data persists in the `hetu-postgres-data` volume.
+
+The old Supabase migrations and compatibility code are retained temporarily as
+historical reference while the application routes are moved to SQLAlchemy. They
+are not part of the local runtime or dependency set.
+
 **OMEN** is an institutional career intelligence and employability platform. It connects student profile signals, current market demand, learning progress, verified projects, placement opportunities, applications, outcomes, and institutional interventions.
 
 > **Your career shouldn't be a guess.** OMEN is designed to show where a student stands in the market and what to do next—not to make unsupported hiring-probability claims.

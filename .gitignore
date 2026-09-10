@@ -9,4 +9,3 @@
 .DS_Store
 .pytest_cache/
 coverage/
-ml/artifacts/*.json
