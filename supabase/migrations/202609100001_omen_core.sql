@@ -1,4 +1,4 @@
-create extension if not exists "uuid-ossp";
+create extension if not exists "uuid-ossp" with schema extensions;
 create type public.app_role as enum ('student','tpo','admin');
 create type public.application_status as enum ('Applied','Under Review','Shortlisted','Interview','Selected','Not Shortlisted','Rejected');
 create type public.project_status as enum ('Submitted','Under Review','Rework Required','Verified');
