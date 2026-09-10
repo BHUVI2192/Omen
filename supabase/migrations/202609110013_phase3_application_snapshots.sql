@@ -1,0 +1,4 @@
+create table if not exists public.application_intelligence_snapshots (id uuid primary key default uuid_generate_v4(), application_id uuid references public.applications(id) on delete cascade, match_score numeric(5,2), eligibility boolean, skill_coverage numeric(5,2), evidence_strength numeric(5,2), captured_at timestamptz default now());
+create index if not exists application_snapshots_application_idx on public.application_intelligence_snapshots(application_id);
+alter table public.application_intelligence_snapshots enable row level security;
+create policy application_snapshots_student_read on public.application_intelligence_snapshots for select to authenticated using (application_id in (select a.id from public.applications a join public.student_profiles sp on sp.id=a.student_id where sp.user_id=auth.uid()) or public.is_tpo());

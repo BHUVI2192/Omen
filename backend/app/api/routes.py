@@ -381,6 +381,87 @@ def applications(): return {'applications':APPLICATIONS}
 @router.get('/notifications')
 def notifications(): return {'notifications':NOTIFICATIONS}
 
+def _profile_completeness(student: dict) -> int:
+    fields=[student.get('department'),student.get('degree') or student.get('branch'),student.get('cgpa'),student.get('skills'),student.get('experience'),student.get('career_intents') or student.get('career_intent'),student.get('readiness_signals') or student.get('assessments')]
+    return round(sum(bool(x) for x in fields)/len(fields)*100)
+
+def _dashboard_payload(student: dict, applications: list, notes: list, jobs: list):
+    skills=student.get('skills',{}); experience=student.get('experience',{}); assessments=student.get('assessments',{})
+    result=calculate_score(skills,experience,assessments)
+    target=(student.get('career_intents') or [student.get('career_intent') or 'Data Analyst'])[0]
+    if target not in ROLES: target='Data Analyst'
+    match=role_match(target,skills)
+    gaps=[{'skill':g,'current':round(skills.get(g,0)),'required':round(ROLES[target]['skills'].get(g,0)*100),'importance':'High','estimated_hours':max(4,round((ROLES[target]['skills'].get(g,0)*100-skills.get(g,0))*.55))} for g in match['missing_skills']]
+    next_action=f'Improve {gaps[0]["skill"]} from current level to the level needed for {target}' if gaps else 'Complete a project that creates verified evidence'
+    return {'profile':{'name':student.get('name') or student.get('full_name') or 'Student','department':student.get('department'),'career_direction':target,'completeness':_profile_completeness(student)},'market_score':{'score':result.score,'components':result.components,'contributors':result.positives+result.negatives,'methodology':'Market-derived deterministic score; not a hiring probability.'},'career_dna':{'direction':target,'match':match['match'],'strongest_skills':sorted(skills,key=skills.get,reverse=True)[:4],'target_roles':student.get('career_intents') or [target],'verified_skills':[],'weakest_dimensions':result.gaps},'top_gaps':gaps,'next_action':{'title':next_action,'reason':'Prioritized from your target-role requirements and current profile.'},'recommended_opportunities':jobs[:3],'learning_recommendations':[{'title':'SQL for Data Analysis','why':'SQL is a high-demand skill and a current market gap.','estimated_hours':24,'target_roles':['Data Analyst']}],'applications':{'total':len(applications),'under_review':sum(x.get('status')=='Under Review' for x in applications),'shortlisted':sum(x.get('status')=='Shortlisted' for x in applications),'interviews':sum(x.get('status')=='Interview' for x in applications),'offers':sum(x.get('status')=='Selected' for x in applications)},'notifications':notes[:5]}
+
+@router.get('/students/me/dashboard')
+def student_dashboard(authorization: str | None = Header(default=None)):
+    user=_real_student(authorization)
+    student=OmenRepository(user['id']).student_profile() if is_configured() else DEMO_STUDENT
+    if is_configured():
+        repo=OmenRepository(user['id']); applications=repo.applications() or []; notes=repo.notifications() or []; raw_jobs=repo.jobs() or []
+        jobs=[]
+        for row in raw_jobs:
+            role=(row.get('roles') or {}).get('name') or row.get('title') or 'Opportunity'; requirements=row.get('job_requirements') or []
+            required=[(x.get('skills') or {}).get('name') for x in requirements if (x.get('skills') or {}).get('name')]
+            match=role_match(role,student.get('skills',{})) if role in ROLES else {'match':0}
+            jobs.append({'id':row['id'],'company':(row.get('companies') or {}).get('name','Company'),'role':role,'location':row.get('location'),'deadline':row.get('deadline'),'match':match.get('match',0),'eligibility':eligibility(student,row),'missing_skills':[s for s in required if student.get('skills',{}).get(s,0)<65]})
+        return _dashboard_payload(student,applications,notes,jobs)
+    return _dashboard_payload(student,APPLICATIONS,NOTIFICATIONS,[{'id':j['id'],'company':j['company'],'role':j['role'],'location':j['location'],'deadline':j['deadline'],'match':role_match(j['role'],student.get('skills',{}))['match'],'eligibility':eligibility(student,j),'missing_skills':[s for s in j['skills'] if student.get('skills',{}).get(s,0)<65]} for j in JOBS])
+
+@router.get('/students/me/notifications')
+def student_notifications(authorization: str | None = Header(default=None)):
+    if is_configured():
+        user=current_user(authorization); return {'notifications':OmenRepository(user['id']).notifications() or []}
+    return {'notifications':NOTIFICATIONS}
+
+@router.post('/students/me/notifications/{notification_id}/read')
+def mark_notification_read(notification_id: str, authorization: str | None = Header(default=None)):
+    if is_configured():
+        try: return {'notification':OmenRepository(current_user(authorization)['id']).mark_notification_read(notification_id)}
+        except ValueError as exc: raise HTTPException(404,str(exc))
+    row=next((x for x in NOTIFICATIONS if x['id']==notification_id),None)
+    if not row: raise HTTPException(404,'Notification not found')
+    row['read']=True; row['read_at']=datetime.now(timezone.utc).isoformat(); return {'notification':row}
+
+@router.get('/students/me/recommendations')
+def student_recommendations(authorization: str | None = Header(default=None)):
+    dashboard=student_dashboard(authorization); return {'next_action':dashboard['next_action'],'opportunities':dashboard['recommended_opportunities'],'learning':dashboard['learning_recommendations']}
+
+@router.get('/students/me/learning/recommendations')
+def learning_recommendations(authorization: str | None = Header(default=None)):
+    return {'recommendations':student_dashboard(authorization)['learning_recommendations']}
+
+@router.get('/students/me/opportunities')
+def student_opportunities(authorization: str | None = Header(default=None)):
+    return {'opportunities':student_dashboard(authorization)['recommended_opportunities']}
+
+@router.get('/students/me/opportunities/{opportunity_id}/match')
+def opportunity_match(opportunity_id: str, authorization: str | None = Header(default=None)):
+    student=_student_data(authorization)[1]; job=next((j for j in JOBS if j['id']==opportunity_id),None)
+    if not job: raise HTTPException(404,'Opportunity not found')
+    match=role_match(job['role'],student.get('skills',{})); elig=eligibility(student,job)
+    return {'opportunity':job,'eligibility':elig,'match':{'score':match['match'],'matched_skills':match['matched_skills'],'missing_skills':match['missing_skills'],'evidence_strength':round(match['match']*.8)},'explanation':'Transparent feature-based role and skill alignment.'}
+
+@router.get('/students/me/applications')
+def student_applications(authorization: str | None = Header(default=None)):
+    if is_configured(): return {'applications':OmenRepository(current_user(authorization)['id']).applications() or []}
+    return {'applications':APPLICATIONS}
+
+@router.get('/students/me/applications/{application_id}/intelligence')
+def application_intelligence(application_id: str, authorization: str | None = Header(default=None)):
+    row=next((x for x in APPLICATIONS if x['id']==application_id),None)
+    if not row: raise HTTPException(404,'Application not found')
+    return {'application':row,'company_reason':row.get('rejection_reason') or ('Company rejection reason was not provided.' if row.get('status') in {'Rejected','Not Shortlisted'} else None),'inferred_improvement_areas':['Docker exposure','Backend project depth','Technical interview readiness'] if row.get('status') in {'Rejected','Not Shortlisted'} else [],'next_actions':['Complete a targeted course','Build verified project evidence','Reapply to similar roles'] if row.get('status') in {'Rejected','Not Shortlisted'} else []}
+
+@router.post('/students/me/polls/{poll_id}/responses')
+def respond_to_poll(poll_id: str, option_id: str, authorization: str | None = Header(default=None)):
+    if is_configured(): raise HTTPException(501,'Poll response persistence requires the authenticated repository path')
+    key=f'{poll_id}:{_request_user(authorization)["id"]}'
+    if any(x['key']==key for x in NOTIFICATIONS if x.get('poll_response')): raise HTTPException(409,'Poll already answered')
+    NOTIFICATIONS.append({'id':f'poll-response-{len(NOTIFICATIONS)}','title':'Poll response recorded','body':'Your institutional preference was recorded.','type':'poll_response','read':True,'poll_response':True,'key':key,'option_id':option_id}); return {'recorded':True,'poll_id':poll_id,'option_id':option_id}
+
 @router.get('/tpo/overview')
 def tpo_overview(authorization: str | None = Header(default=None)):
     _request_tpo(authorization)

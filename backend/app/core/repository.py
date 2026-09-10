@@ -77,6 +77,10 @@ class OmenRepository:
     def notifications(self):
         if not is_configured(): return None
         return client().table('notifications').select('*').eq('user_id',self.user_id).order('created_at',desc=True).execute().data
+    def mark_notification_read(self, notification_id: str):
+        rows=client().table('notifications').update({'read_at':datetime.now(timezone.utc).isoformat()}).eq('id',notification_id).eq('user_id',self.user_id).execute().data
+        if not rows: raise ValueError('Notification not found')
+        return rows[0]
     def courses(self):
         if not is_configured(): return None
         return client().table('courses').select('*,skills(name),course_phases(*)').order('title').execute().data

@@ -152,3 +152,43 @@ FastAPI CORS explicitly allows `http://localhost:3000`, authenticated requests, 
 Resume uploads now require an authenticated student, non-empty valid PDF bytes beginning with the PDF signature, and a maximum size of 5 MB. Production uploads use the private Supabase Storage bucket `resumes` at a unique path `{authenticated_user_id}/{uuid}.pdf`, then persist storage path, original filename, content type, file size, and timestamp metadata in `public.resumes`. The service-role key remains backend-only. Storage policies scope object access to the authenticated user folder, and no public URL is returned.
 
 Hydration investigation found no OMEN onboarding-level `AudioContext`, random ID, browser-only render branch, or remaining onboarding date expression after stabilization. Production and development browser loads showed no hydration or AudioContext console errors. The only remaining date formatting is in the isolated `/demo` application-history view after data is loaded; it does not participate in onboarding render hydration.
+
+
+## Phase 3 student career operating system
+
+Phase 3 adds a student command-center aggregation endpoint at `GET /api/v1/students/me/dashboard`. It returns the current profile summary, profile completeness, market-derived score and contributors, Career DNA summary, prioritized skill gaps, next-best action, learning recommendations, opportunities, application summary, and notifications in one request. The frontend uses this aggregation to avoid a long sequential dashboard waterfall.
+
+The student workspace navigation now includes Overview, Career DNA, Market, Learn, Skill Gaps, Projects, Placements, Applications, and Profile. Compatibility routes such as `/student/career-dna`, `/student/market-score`, `/student/careers`, and `/student/learning` remain available. Polls are not a primary navigation module; institutional actions belong in notifications.
+
+Supabase Auth remains the only authentication system. Login supports Google OAuth and email/password through `signInWithPassword`; signup at `/signup` uses `signUp` with Supabase Auth and supports confirmation-required responses. No custom password table or password hashing was introduced.
+
+Phase 3 APIs include:
+
+```text
+GET  /api/v1/students/me/dashboard
+GET  /api/v1/students/me/notifications
+POST /api/v1/students/me/notifications/{id}/read
+GET  /api/v1/students/me/recommendations
+GET  /api/v1/students/me/learning/recommendations
+GET  /api/v1/students/me/opportunities
+GET  /api/v1/students/me/opportunities/{id}/match
+GET  /api/v1/students/me/applications
+GET  /api/v1/students/me/applications/{id}/intelligence
+POST /api/v1/students/me/polls/{poll_id}/responses
+```
+
+Market Employability remains the existing deterministic market-demand heuristic. The dashboard calls its output a market-derived readiness signal, not a hiring probability. Opportunity matching uses transparent role/skill alignment and eligibility rules. Application intelligence never fabricates employer rejection reasons; when none exists it explicitly says the company reason was not provided and labels improvement areas as OMEN inference.
+
+Application-time historical fields are supported by the new `application_intelligence_snapshots` table. The existing application, notification, project, course, assessment, and skill entities are reused rather than duplicated.
+
+### Isolated ML development pipeline
+
+The `ml/` package is independent from web startup and production database writes. It uses `data/synthetic/students.csv`, explicitly labeled **SYNTHETIC — DEVELOPMENT ONLY**, and writes small artifacts to `ml/artifacts/`. The current development-only artifact is a deterministic weighted market-readiness baseline with a reproducible seed and MAE evaluation on a held-out split. It is not used as a production placement probability and is not presented in the student UI.
+
+Run the independent training command with:
+
+```bash
+PYTHONPATH=. python -m ml.training.train_all
+```
+
+The generated registry metadata records model name, version, dataset, feature version, metrics, synthetic flag, and weights. Synthetic metrics are labeled `synthetic_development_evaluation`. No model trains during API startup or request handling.
